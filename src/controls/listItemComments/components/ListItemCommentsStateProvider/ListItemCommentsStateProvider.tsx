@@ -1,36 +1,30 @@
 import React, { createContext, useReducer } from "react";
-import { ListItemCommentsStateReducer } from "./ListItemCommentsStateReducer";
-import { IListItemCommentsState } from "./IListItemCommentsState";
-import { IListItemCommentsStateContext } from "./IListItemCommentsStateContext";
-import { IPageInfo } from "../../models/IPageInfo";
-import { IAddCommentPayload } from "../../models/IAddCommentPayload";
-import { IComment } from "../Comments/IComment";
-// Reducer
-// Initial State (Store )
+
+import type { IListItemCommentsState } from "./IListItemCommentsState";
+import type { IListItemCommentsStateContext } from "./IListItemCommentsStateContext";
+import { listItemCommentsStateReducer } from "./listItemCommentsStateReducer";
+
 const initialState: IListItemCommentsState = {
-  errorInfo: undefined,
-  comments: [],
-  isLoading: false,
-  isScrolling: false,
-  pageInfo: {} as IPageInfo,
-  commentAction: undefined,
-  commentToAdd: {} as IAddCommentPayload,
-  selectedComment: {} as IComment,
+	errorInfo: undefined,
+	comments: [],
+	isLoading: false,
+	isScrolling: false
 };
 
 const stateInit: IListItemCommentsStateContext = {
-  listItemCommentsState: initialState,
-  setlistItemCommentsState: () => { return; },
+	listItemCommentsState: initialState,
+	setListItemCommentsState: () => { return; }
 };
 
-//  (store)
+// store
 export const ListItemCommentsStateContext = createContext<IListItemCommentsStateContext>(stateInit);
-export const ListItemCommentsStateProvider = (props: { children: React.ReactNode }): JSX.Element => {
-  const [listItemCommentsState, setlistItemCommentsState] = useReducer(ListItemCommentsStateReducer, initialState);
+export const ListItemCommentsStateProvider = (props: { children: React.ReactNode; }): JSX.Element =>
+{
+	const [listItemCommentsState, setListItemCommentsState] = useReducer(listItemCommentsStateReducer, initialState);
 
-  return (
-    <ListItemCommentsStateContext.Provider value={{ listItemCommentsState, setlistItemCommentsState }}>
-      {props.children}
-    </ListItemCommentsStateContext.Provider>
-  );
+	return (
+		<ListItemCommentsStateContext.Provider value={{ listItemCommentsState, setListItemCommentsState }}>
+			{props.children}
+		</ListItemCommentsStateContext.Provider>
+	);
 };

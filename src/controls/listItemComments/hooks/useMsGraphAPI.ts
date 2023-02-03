@@ -1,91 +1,118 @@
-import { Person } from "@microsoft/microsoft-graph-types";
-import { MSGraphClientFactory, MSGraphClientV3 } from "@microsoft/sp-http";
-import { useCallback, useContext } from "react";
-import { AppContext } from "../common";
-import { IUserInfo, IUsersResults } from "../models/IUsersResults";
+import type { Person } from "@microsoft/microsoft-graph-types";
+import type { GraphRequest } from "@microsoft/microsoft-graph-client";
+import type { MSGraphClientV3 } from "@microsoft/sp-http";
+import { MSGraphClientFactory } from "@microsoft/sp-http";
+import { useCallback, useContext, useMemo } from "react";
 
-interface returnObject {
-  getUsers: (search: string) => Promise<IUsersResults>;
-  getUsersNextPage: (nextLink: string) => Promise<IUsersResults>;
-  getSuggestions: () => Promise<IUsersResults>;
+import type { IUserInfo, IUsersResults } from "../models/IUsersResults";
+import type { IApiCollectionResult } from "./IApiCollectionResult";
+import { AppContext } from "../common";
+
+
+interface IReturnObject
+{
+	getUsers: (search: string) => Promise<IUsersResults>;
+	getUsersNextPage: (nextLink: string) => Promise<IUsersResults>;
+	getSuggestions: () => Promise<IUsersResults>;
 }
 
-export const useMsGraphAPI = (): returnObject => {
-  const { serviceScope } = useContext(AppContext);
-  let _msGraphClient: MSGraphClientV3 = undefined;
-  serviceScope.whenFinished(async () => {
-    _msGraphClient = await serviceScope.consume(MSGraphClientFactory.serviceKey).getClient("3");
-  });
-  const getSuggestions = useCallback(async (): Promise<IUsersResults> => {
-    if (!_msGraphClient) return;
-    const _users: IUserInfo[] = [];
 
-    const suggestedUsersResults = (await _msGraphClient
-      .api(`me/people`)
-      .header("ConsistencyLevel", "eventual")
-      .filter(`personType/class eq 'Person' and personType/subclass eq 'OrganizationUser'`)
-      .orderby(`displayName`)
-      .get()) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    console.log("rs", suggestedUsersResults);
-    const _sugestions: Person[] = suggestedUsersResults.value as Person[];
-    for (const sugestion of _sugestions) {
-      _users.push({
-        displayName: sugestion.displayName,
-        givenName: sugestion.givenName,
-        id: sugestion.id,
-        mail: sugestion.scoredEmailAddresses[0].address,
-      });
-    }
+export function useMsGraphAPI(): IReturnObject
+{
+	const appCtx = useContext(AppContext);
+	if (!appCtx)
+		throw new Error("No wrapping AppContext.Provider called");
 
-    const returnInfo: IUsersResults = {
-      users: _users,
-      hasMore: false,
-      nextLink: undefined,
-    };
-    return returnInfo;
-  }, [_msGraphClient]);
+	const { serviceScope } = appCtx;
+	let graph: MSGraphClientV3 | undefined = undefined;
+	serviceScope.whenFinished(() =>
+	{
+		void serviceScope.consume(MSGraphClientFactory.serviceKey).getClient("3").then((c) => { graph = c; });
+	});
 
-  const getUsers = useCallback(
-    async (search: string): Promise<IUsersResults> => {
-      if (!_msGraphClient || !search) return;
-      let _filter = "";
+	const getSuggestions = useCallback(
+		async (): Promise<IUsersResults> =>
+		{
+			if (!graph)
+				throw new Error("ServiceScope not yet initialized MSGraphClient");
 
-      if (search.length) {
-        _filter = `mail ne null AND (startswith(mail,'${search}') OR startswith(displayName,'${search}'))`;
-      }
+			const api = graph.api(`me/people`) as GraphRequest;
+			const suggestions = await api
+				.header("ConsistencyLevel", "eventual")
+				.filter(`personType/class eq 'Person' and personType/subclass eq 'OrganizationUser'`)
+				.orderby(`displayName`)
+				.get() as IApiCollectionResult<Person>;
 
-      const usersResults = await _msGraphClient
-        .api(`/users`)
-        .header("ConsistencyLevel", "eventual")
-        .filter(_filter)
-        .orderby(`displayName`)
-        .count(true)
-        .top(25)
-        .get();
+			const users = suggestions.value.map((p): IUserInfo => ({
+				displayName: p.displayName ?? "",
+				givenName: p.givenName ?? "",
+				id: p.id ?? "",
+				mail: p.scoredEmailAddresses?.find(x => x)?.address ?? ""
+			}));
 
-      const returnInfo: IUsersResults = {
-        users: usersResults.value,
-        hasMore: usersResults["@odata.nextLink"] ? true : false,
-        nextLink: usersResults["@odata.nextLink"] ?? undefined,
-      };
-      return returnInfo;
-    },
-    [_msGraphClient]
-  );
+			return { users, hasMore: false, nextLink: undefined };
+		},
+		[graph]
+	);
 
-  const getUsersNextPage = useCallback(
-    async (nextLink: string): Promise<IUsersResults> => {
-      if (!_msGraphClient) return;
-      const usersResults = await _msGraphClient.api(`${nextLink}`).get();
-      const returnInfo: IUsersResults = {
-        users: usersResults.value,
-        hasMore: usersResults["@odata.nextLink"] ? true : false,
-        nextLink: usersResults["@odata.nextLink"] ?? undefined,
-      };
-      return returnInfo;
-    },
-    [_msGraphClient]
-  );
+	const getUsers = useCallback(
+		async (search: string): Promise<IUsersResults> =>
+		{
+			if (!graph)
+				throw new Error("ServiceScope not yet initialized MSGraphClient");
 
-  return { getUsers, getUsersNextPage, getSuggestions };
-};
+			if (!search)
+				return { users: [] };
+
+			let filter = "";
+			if (search)
+			{
+				const escapedSearch = search.replace("'", "''");
+				filter = `mail ne null AND (startswith(mail,'${escapedSearch}') OR startswith(displayName,'${escapedSearch}'))`;
+			}
+
+			const api = graph.api(`/users`) as GraphRequest;
+			const usersResults = await api
+				.header("ConsistencyLevel", "eventual")
+				.filter(filter)
+				.orderby(`displayName`)
+				.count(true)
+				.top(25)
+				.get() as IApiCollectionResult<IUserInfo>;
+
+			return {
+				users: usersResults.value,
+				hasMore: usersResults["@odata.nextLink"] ? true : false,
+				nextLink: usersResults["@odata.nextLink"] ?? undefined
+			};
+		},
+		[graph]
+	);
+
+	const getUsersNextPage = useCallback(
+		async (nextLink: string): Promise<IUsersResults> =>
+		{
+			if (!graph)
+				throw new Error("ServiceScope not yet initialized MSGraphClient");
+
+			const api = graph.api(nextLink) as GraphRequest;
+			const usersResults = await api.get() as IApiCollectionResult<IUserInfo>;
+
+			return {
+				users: usersResults.value,
+				hasMore: usersResults["@odata.nextLink"] ? true : false,
+				nextLink: usersResults["@odata.nextLink"] ?? undefined
+			};
+		},
+		[graph]
+	);
+
+
+	const service = useMemo(
+		() => ({ getUsers, getUsersNextPage, getSuggestions }),
+		[getUsers, getUsersNextPage, getSuggestions]
+	);
+
+	return service;
+}
+

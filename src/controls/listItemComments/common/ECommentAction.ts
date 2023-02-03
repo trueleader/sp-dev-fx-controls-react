@@ -1,4 +1,5 @@
-export enum ECommentAction {
-  "ADD" = "ADD",
-  "DELETE" = "DELETE"
+export enum ECommentAction
+{
+	ADD = "ADD",
+	DELETE = "DELETE"
 }

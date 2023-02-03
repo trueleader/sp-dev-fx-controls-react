@@ -1,2 +1,2 @@
-export * from './useMsGraphAPI';
-export * from './useSpAPI';
+export * from "./useMsGraphAPI";
+export * from "./useSpAPI";

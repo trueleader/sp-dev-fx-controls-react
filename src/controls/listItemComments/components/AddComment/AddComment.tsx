@@ -1,133 +1,134 @@
-import { Stack } from "office-ui-fabric-react/lib/Stack";
-import * as React from "react";
-import { useContext, useRef, useState } from "react";
-import { EListItemCommentsStateTypes, ListItemCommentsStateContext  } from "./../ListItemCommentsStateProvider";
-import { IUserInfo } from "../../models/IUsersResults";
+import { IconButton } from "@fluentui/react/lib/Button";
+import { Stack } from "@fluentui/react/lib/Stack";
+import { Text } from "@fluentui/react/lib/Text";
 import { MentionsInput, Mention, SuggestionDataItem, MentionItem } from "react-mentions";
-import { useCallback } from "react";
-import { useAddCommentStyles } from "./useAddCommentStyles";
+import React, { useCallback, useContext, useRef, useState } from "react";
+
+import type { IAddCommentPayload } from "../../models/IAddCommentPayload";
 import { PHOTO_URL } from "../../common/constants";
-import { IconButton } from "office-ui-fabric-react/lib/Button";
-import { Text} from "office-ui-fabric-react/lib/Text";
 import { ECommentAction } from "../../common/ECommentAction";
-import { IAddCommentPayload } from "../../models/IAddCommentPayload";
-import { useMsGraphAPI } from "../..";
+import { useMsGraphAPI } from "../../hooks/useMsGraphAPI";
+import { EListItemCommentsStateTypes, ListItemCommentsStateContext } from "../ListItemCommentsStateProvider";
+import { useAddCommentStyles } from "./useAddCommentStyles";
 
-export interface IAddCommentProps {}
 
-export const AddComment: React.FunctionComponent<IAddCommentProps> = (props: IAddCommentProps) => {
-  const [commentText, setCommentText] = useState<string>("");
-  const { getUsers, getSuggestions } = useMsGraphAPI();
-  const { reactMentionStyles, mentionsClasses, componentClasses } = useAddCommentStyles();
-  const [singleLine, setSingleLine] = useState<boolean>(true);
-  const { setlistItemCommentsState } = useContext(ListItemCommentsStateContext);
-  const _addCommentText = useRef<IAddCommentPayload>({ mentions: [], text: "" });
+export const AddComment: React.FunctionComponent = () =>
+{
+	const [commentText, setCommentText] = useState<string>("");
+	const { getUsers, getSuggestions } = useMsGraphAPI();
+	const { reactMentionStyles, mentionsClasses, componentClasses } = useAddCommentStyles();
+	const [singleLine, setSingleLine] = useState<boolean>(true);
+	const { setListItemCommentsState } = useContext(ListItemCommentsStateContext);
+	const _addCommentText = useRef<IAddCommentPayload>({ mentions: [], text: "" });
 
-  const sugestionsContainer = useRef<HTMLDivElement>();
-  let _reactMentionStyles = reactMentionStyles;
+	const sugestionsContainer = useRef<HTMLDivElement | null>(null);
 
-  const _onChange = useCallback((event, newValue: string, newPlainTextValue: string, mentions: MentionItem[]) => {
-    _reactMentionStyles = reactMentionStyles;
-    if (newValue) {
-      setSingleLine(false);
-      _reactMentionStyles["&multiLine"].control = { height: 63 };
-      _addCommentText.current.text = newPlainTextValue;
-      _addCommentText.current.mentions = [];
-      for (let index = 0; index < mentions.length; index++) {
-        const mention = mentions[index];
-        _addCommentText.current.text = _addCommentText.current.text.replace(mention.display, `@mention{${index}}`);
-        _addCommentText.current.mentions.push({ email: mention.id, name: mention.display.replace("@", "") });
-      }
-    } else {
-      setSingleLine(true);
-      _reactMentionStyles["&multiLine"].control = { height: 35 };
-      _addCommentText.current = { mentions: [], text: "" };
-    }
-    setCommentText(newValue);
-  }, []);
+	const onChange = useCallback(
+		(event, newValue: string, newPlainTextValue: string, mentions: Array<MentionItem>) =>
+		{
+			if (newValue)
+			{
+				setSingleLine(false);
+				reactMentionStyles["&multiLine"].control = { height: 63 };
+				_addCommentText.current.text = newPlainTextValue;
+				_addCommentText.current.mentions = [];
+				for (let index = 0; index < mentions.length; index++)
+				{
+					const mention = mentions[index];
+					_addCommentText.current.text = _addCommentText.current.text.replace(mention.display, `@mention{${index}}`);
+					_addCommentText.current.mentions.push({ email: mention.id, name: mention.display.replace("@", "") });
+				}
+			}
+			else
+			{
+				setSingleLine(true);
+				reactMentionStyles["&multiLine"].control = { height: 35 };
+				_addCommentText.current = { mentions: [], text: "" };
+			}
 
-  const _addComment = useCallback(() => {
-    setlistItemCommentsState({ type: EListItemCommentsStateTypes.SET_COMMENT_ACTION, payload: ECommentAction.ADD });
-    setlistItemCommentsState({ type: EListItemCommentsStateTypes.SET_ADD_COMMENT, payload: _addCommentText.current });
-    setSingleLine(true);
-    setCommentText("");
-  }, []);
+			setCommentText(newValue);
+		},
+		[reactMentionStyles]
+	);
 
-  const _searchData = (search: string, callback: (users: SuggestionDataItem[]) => void): void => {
-    // Try to get sugested users when user type '@'
-    if (!search) {
-      getSuggestions()
-        .then((res) => res.users.map((user) => ({ display: user.displayName, id: user.mail })))
-        .then(callback)
-        .catch(() => { /* no-op; */ });
-    } else {
-      getUsers(search)
-        .then((res) => res.users.map((user) => ({ display: user.displayName, id: user.mail })))
-        .then(callback)
-        .catch(() => { /* no-op; */ });
-    }
-  };
+	const addComment = useCallback(
+		() =>
+		{
+			setListItemCommentsState({ type: EListItemCommentsStateTypes.SET_COMMENT_ACTION, payload: ECommentAction.ADD });
+			setListItemCommentsState({ type: EListItemCommentsStateTypes.SET_ADD_COMMENT, payload: _addCommentText.current });
+			setSingleLine(true);
+			setCommentText("");
+		},
+		[setListItemCommentsState]
+	);
 
-  const renderSugestion = useCallback((suggestion: SuggestionDataItem): React.ReactNode => {
-    const _user: IUserInfo = {
-      id: suggestion.id as string,
-      displayName: suggestion.display,
-      mail: suggestion.id as string,
-    };
-    return (
-      <>
-        <Stack tokens={{ padding: 5 }} styles={{ root: { width: 260 } }}>
-          <Stack horizontal horizontalAlign="start" tokens={{ childrenGap: 10 }}>
-            <img src={`${PHOTO_URL}${_user.mail}`} width={30} height={30} style={{ borderRadius: "50%" }} />
-            <Stack>
-              <Text styles={{ root: { fontWeight: 700 } }} variant="smallPlus" nowrap>
-                {_user.displayName}
-              </Text>
-              <Text variant="small" nowrap>
-                {_user.mail}
-              </Text>
-            </Stack>
-          </Stack>
-        </Stack>
-      </>
-    );
-  }, []);
+	const searchData = useCallback(
+		(search: string, callback: (users: Array<SuggestionDataItem>) => void): void =>
+		{
+			// Try to get sugested users when user type '@'
+			const promise = search ? getUsers(search) : getSuggestions();
+			void promise.then(({ users }) => callback(users.map(u => ({ display: u.displayName, id: u.mail }))));
+		},
+		[getSuggestions, getUsers]
+	);
 
-  return (
-    <>
-    {/** Render Sugestions in the host element */}
-      <div
-        id="renderSugestions"
-        ref={(el) => {
-          sugestionsContainer.current = el;
-        }}
-      />
-      <div className={componentClasses.container} style={{ height: singleLine ? 35 : "unset" }}>
-        <MentionsInput
-          value={commentText}
-          onChange={_onChange}
-          placeholder="@mention or comment"
-          style={_reactMentionStyles}
-          suggestionsPortalHost={sugestionsContainer.current}
-        >
-          <Mention
-            trigger="@"
-            data={_searchData}
-            renderSuggestion={renderSugestion}
-            displayTransform={(id, display) => `@${display}`}
-            className={mentionsClasses.mention}
-          />
-        </MentionsInput>
-        <Stack horizontal horizontalAlign="end" tokens={{ padding: 10 }}>
-          <IconButton
-            iconProps={{ iconName: "send" }}
-            title="Send"
-            onClick={() => {
-              _addComment();
-            }}
-          />
-        </Stack>
-      </div>
-    </>
-  );
+	const renderSugestion = useCallback(
+		(suggestion: SuggestionDataItem): React.ReactNode =>
+		{
+			const { id: mail, display } = suggestion;
+
+			return (
+				<Stack tokens={{ padding: 5 }} styles={{ root: { width: 260 } }}>
+					<Stack horizontal horizontalAlign="start" tokens={{ childrenGap: 10 }}>
+						<img src={`${PHOTO_URL}${mail}`} width={30} height={30} style={{ borderRadius: "50%" }} />
+						<Stack>
+							<Text styles={{ root: { fontWeight: 700 } }} variant="smallPlus" nowrap>
+								{display}
+							</Text>
+							<Text variant="small" nowrap>
+								{mail}
+							</Text>
+						</Stack>
+					</Stack>
+				</Stack>
+			);
+		},
+		[]
+	);
+
+
+	return (
+		<>
+			{/* Render Sugestions in the host element */}
+			<div id="renderSugestions" ref={sugestionsContainer} />
+			<div className={componentClasses.container} style={{ height: singleLine ? 35 : "unset" }}>
+				<MentionsInput
+					value={commentText}
+					onChange={onChange}
+					placeholder="@mention or comment"
+					style={reactMentionStyles}
+					suggestionsPortalHost={sugestionsContainer.current ?? undefined}
+				>
+					<Mention
+						trigger="@"
+						data={searchData}
+						renderSuggestion={renderSugestion}
+						displayTransform={transformMentionsDisplayValue}
+						className={mentionsClasses.mention}
+					/>
+				</MentionsInput>
+				<Stack horizontal horizontalAlign="end" tokens={{ padding: 10 }}>
+					<IconButton iconProps={{ iconName: "send" }} title="Send" onClick={addComment} />
+				</Stack>
+			</div>
+		</>
+	);
 };
+
+
+
+function transformMentionsDisplayValue(id: string, display: string): string
+{
+	return `@${display}`;
+}
+

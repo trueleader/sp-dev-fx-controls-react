@@ -1,106 +1,103 @@
-import { AppContext } from "../common";
-import { useContext, useCallback } from "react";
-import { SPHttpClient, SPHttpClientResponse, ISPHttpClientOptions } from "@microsoft/sp-http";
-import { IlistItemCommentsResults } from "./../models";
-import { IAddCommentPayload } from "../models/IAddCommentPayload";
-import { IComment } from "../components/Comments/IComment";
+import type { ISPHttpClientOptions } from "@microsoft/sp-http";
+import { SPHttpClient } from "@microsoft/sp-http";
 import { PageContext } from "@microsoft/sp-page-context";
-interface returnObject {
-  getListItemComments: () => Promise<IlistItemCommentsResults>;
-  getNextPageOfComments: (nextLink: string) => Promise<IlistItemCommentsResults>;
-  addComment: (comment: IAddCommentPayload) => Promise<IComment>;
-  deleteComment: (commentId: number) => Promise<void>;
+import React, { useContext, useCallback } from "react";
+
+import type { IAddCommentPayload, IListItemCommentsResults } from "../models";
+import type { IApiCollectionResult } from "./IApiCollectionResult";
+import type { IComment } from "../components/Comments/IComment";
+import { AppContext } from "../common";
+
+
+interface IReturnObject
+{
+	getListItemComments: () => Promise<IListItemCommentsResults>;
+	getNextPageOfComments: (nextLink: string) => Promise<IListItemCommentsResults>;
+	addComment: (comment: IAddCommentPayload) => Promise<IComment>;
+	deleteComment: (commentId: number) => Promise<void>;
 }
 
-export const useSpAPI = (): returnObject => {
-  const { serviceScope, webUrl, listId, itemId, numberCommentsPerPage } = useContext(AppContext);
-  let _webUrl: string = "";
-  serviceScope.whenFinished(async () => {
-    _webUrl = serviceScope.consume(PageContext.serviceKey).web.absoluteUrl;
-  });
-  //https://contoso.sharepoint.com/sites/ThePerspective/_api/web/lists(@a1)/GetItemById(@a2)/Comments(@a3)?@a1=%27%7BE738C4B3%2D6CFF%2D493A%2DA8DA%2DDBBF4732E3BF%7D%27&@a2=%2729%27&@a3=%273%27
+export function useSpAPI(): IReturnObject
+{
+	const appCtx = useContext(AppContext);
+	if (!appCtx)
+		throw new Error("No wrapping AppContext.Provider called");
 
-  const deleteComment = useCallback(
-    async (commentId: number): Promise<void> => {
-      const spHttpClient = serviceScope.consume(SPHttpClient.serviceKey);
-      if (!spHttpClient) return;
-      const _endPointUrl = `${
-        webUrl ?? _webUrl
-      }/_api/web/lists(@a1)/GetItemById(@a2)/Comments(@a3)?@a1='${listId}'&@a2='${itemId}'&@a3='${commentId}'`;
-      const spOpts: ISPHttpClientOptions = {
-        method: "DELETE",
-      };
-      await spHttpClient.fetch(
-        `${_endPointUrl}`,
-        SPHttpClient.configurations.v1,
-        spOpts
-      );
-      return;
-    },
-    [serviceScope]
-  );
+	const { serviceScope, webUrl, listId, itemId, numberCommentsPerPage } = appCtx;
+	//https://contoso.sharepoint.com/sites/ThePerspective/_api/web/lists(@a1)/GetItemById(@a2)/Comments(@a3)?@a1=%27%7BE738C4B3%2D6CFF%2D493A%2DA8DA%2DDBBF4732E3BF%7D%27&@a2=%2729%27&@a3=%273%27
+	let apiUrl = webUrl ? `${webUrl}/_api` : "/_api";
+	let sp: SPHttpClient | undefined = undefined;
+	serviceScope.whenFinished(() =>
+	{
+		sp = serviceScope.consume(SPHttpClient.serviceKey);
 
-  const addComment = useCallback(
-    async (comment: IAddCommentPayload): Promise<IComment> => {
-      const spHttpClient = serviceScope.consume(SPHttpClient.serviceKey);
-      if (!spHttpClient) return;
-      const _endPointUrl = `${
-        webUrl ?? _webUrl
-      }/_api/web/lists(@a1)/GetItemById(@a2)/Comments()?@a1='${listId}'&@a2='${itemId}'`;
-      const spOpts: ISPHttpClientOptions = {
-        body: `{ "text": "${comment.text}", "mentions": ${JSON.stringify(comment.mentions)}}`,
-      };
-      const _listResults: SPHttpClientResponse = await spHttpClient.post(
-        `${_endPointUrl}`,
-        SPHttpClient.configurations.v1,
-        spOpts
-      );
-      const _commentResults: IComment = (await _listResults.json()) as IComment;
-      return _commentResults;
-    },
-    [serviceScope]
-  );
+		if (!webUrl)
+			apiUrl = `${serviceScope.consume(PageContext.serviceKey).web.absoluteUrl}/_api`;
+	});
 
-  const getListItemComments = useCallback(async (): Promise<IlistItemCommentsResults> => {
-    const spHttpClient = serviceScope.consume(SPHttpClient.serviceKey);
-    if (!spHttpClient) return;
-    const _endPointUrl = `${
-      webUrl ?? _webUrl
-    }/_api/web/lists(@a1)/GetItemById(@a2)/GetComments()?@a1='${listId}'&@a2='${itemId}'&$top=${
-      numberCommentsPerPage ?? 10
-    }`;
-    const _listResults: SPHttpClientResponse = await spHttpClient.get(
-      `${_endPointUrl}`,
-      SPHttpClient.configurations.v1
-    );
-    const _commentsResults = (await _listResults.json()) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    const _returnComments: IlistItemCommentsResults = {
-      comments: _commentsResults.value,
-      hasMore: _commentsResults["@odata.nextLink"] ? true : false,
-      nextLink: _commentsResults["@odata.nextLink"] ?? undefined,
-    };
-    return _returnComments;
-  }, [serviceScope]);
+	const deleteComment = useCallback(
+		async (commentId: number): Promise<void> =>
+		{
+			if (!sp)
+				throw new Error("ServiceScope not yet initialized SPHttpClient");
 
-  const getNextPageOfComments = useCallback(
-    async (nextLink: string): Promise<IlistItemCommentsResults> => {
-      const spHttpClient = serviceScope.consume(SPHttpClient.serviceKey);
-      if (!spHttpClient || !nextLink) return;
-      const _endPointUrl = nextLink;
-      const _listResults: SPHttpClientResponse = await spHttpClient.get(
-        `${_endPointUrl}`,
-        SPHttpClient.configurations.v1
-      );
-      const _commentsResults = (await _listResults.json()) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-      const _returnComments: IlistItemCommentsResults = {
-        comments: _commentsResults.value,
-        hasMore: _commentsResults["@odata.nextLink"] ? true : false,
-        nextLink: _commentsResults["@odata.nextLink"] ?? undefined,
-      };
-      return _returnComments;
-    },
-    [serviceScope]
-  );
+			const url = `${apiUrl}/web/lists(@a1)/GetItemById(@a2)/Comments(@a3)?@a1='${listId}'&@a2='${itemId}'&@a3='${commentId}'`;
+			const spOpts: ISPHttpClientOptions = { method: "DELETE" };
+			await sp.fetch(`${url}`, SPHttpClient.configurations.v1, spOpts);
+		},
+		[apiUrl, itemId, listId, sp]
+	);
 
-  return { getListItemComments, getNextPageOfComments, addComment, deleteComment };
-};
+	const addComment = useCallback(
+		async (comment: IAddCommentPayload): Promise<IComment> =>
+		{
+			if (!sp)
+				throw new Error("ServiceScope not yet initialized SPHttpClient");
+
+			const url = `${apiUrl}/web/lists(@a1)/GetItemById(@a2)/Comments()?@a1='${listId}'&@a2='${itemId}'`;
+			const spOpts: ISPHttpClientOptions = {
+				body: `{ "text": "${comment.text}", "mentions": ${JSON.stringify(comment.mentions)}}`
+			};
+			const response = await sp.post(`${url}`, SPHttpClient.configurations.v1, spOpts);
+
+			return (await response.json()) as IComment;
+		},
+		[apiUrl, itemId, listId, sp]
+	);
+
+	const getCommentsByUrl = useCallback(
+		async (url: string): Promise<IListItemCommentsResults> =>
+		{
+			if (!sp)
+				throw new Error("ServiceScope not yet initialized SPHttpClient");
+
+			const response = await sp.get(`${url}`, SPHttpClient.configurations.v1);
+
+			const results = (await response.json()) as IApiCollectionResult<IComment>;
+
+			return {
+				comments: results.value,
+				hasMore: results["@odata.nextLink"] ? true : false,
+				nextLink: results["@odata.nextLink"] ?? undefined
+			};
+		},
+		[sp]
+	);
+
+	const getListItemComments = useCallback(
+		(): Promise<IListItemCommentsResults> =>
+		{
+			const url = `${apiUrl}/web/lists(@a1)/GetItemById(@a2)/GetComments()?@a1='${listId}'&@a2='${itemId}'&$top=${numberCommentsPerPage ?? 10}`;
+			return getCommentsByUrl(url);
+		},
+		[apiUrl, getCommentsByUrl, itemId, listId, numberCommentsPerPage]
+	);
+
+
+	const service = React.useMemo(
+		() => ({ getListItemComments, getNextPageOfComments: getCommentsByUrl, addComment, deleteComment }),
+		[getListItemComments, getCommentsByUrl, addComment, deleteComment]
+	);
+
+	return service;
+}

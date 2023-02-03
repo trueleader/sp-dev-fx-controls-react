@@ -1,4 +1,5 @@
-export interface IPageInfo {
-  hasMore: boolean;
-  nextLink: string;
+export interface IPageInfo
+{
+	hasMore: boolean;
+	nextLink: string;
 }

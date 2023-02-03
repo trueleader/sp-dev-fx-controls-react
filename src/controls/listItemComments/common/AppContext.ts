@@ -1,5 +1,5 @@
 import * as React from "react";
 
-import { IAppContext } from ".";
+import type { IAppContext } from "./IAppContext";
 
-export const AppContext = React.createContext<IAppContext>(undefined);
+export const AppContext = React.createContext<IAppContext | undefined>(undefined);

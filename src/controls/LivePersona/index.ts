@@ -1,2 +1,2 @@
-export * from './ILivePersonaProps';
-export * from './LivePersona';
+export * from "./ILivePersonaProps";
+export * from "./LivePersona";

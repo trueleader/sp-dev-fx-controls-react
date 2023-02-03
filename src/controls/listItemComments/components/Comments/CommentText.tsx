@@ -1,73 +1,64 @@
-import * as React from "react";
-import { useContext, useEffect, useState } from "react";
-import { Mention } from "./IComment";
-import { Text } from "office-ui-fabric-react/lib/Text";
-import { LivePersona } from "../../../LivePersona";
-import { AppContext } from "../../common";
+import he from "he";
+import { Stack } from "@fluentui/react/lib/Stack";
+import { Text } from "@fluentui/react/lib/Text";
+import React from "react";
 import regexifyString from "regexify-string";
-import { Stack } from "office-ui-fabric-react/lib/Stack";
-import { isArray, isObject } from "lodash";
-import he from 'he';
-export interface ICommentTextProps {
-  text: string;
-  mentions: Mention[];
+
+import type { Mention } from "./IComment";
+import { AppContext } from "../../common";
+import { useTheme } from "../../hooks/useTheme";
+import { LivePersona } from "../../../LivePersona";
+
+export interface ICommentTextProps
+{
+	text: string;
+	mentions: Array<Mention>;
 }
 
-export const CommentText: React.FunctionComponent<ICommentTextProps> = (
-  props: React.PropsWithChildren<ICommentTextProps>
-) => {
-  const [commentText, setCommentText] = useState<string | JSX.Element[]>("");
-  const { theme, serviceScope } = useContext(AppContext);
-  const { text, mentions } = props;
-  const mentionsResults: Mention[] = mentions;
+export const CommentText: React.FunctionComponent<ICommentTextProps> = (props: ICommentTextProps) =>
+{
+	const { text, mentions } = props;
 
-  useEffect(() => {
-    const hasMentions = mentions?.length ? true : false;
-    let result: string | JSX.Element[] = text;
-    if (hasMentions) {
-      result = regexifyString({
-        pattern: /@mention&#123;\d+&#125;/g,
-        decorator: (match, index) => {
-          const mention = mentionsResults[index];
-          const _name = `@${mention.name}`;
-          return (
-            <>
-              <LivePersona
-                serviceScope={serviceScope}
-                upn={mention.email}
-                template={<span style={{ color: theme.themePrimary, whiteSpace: "nowrap" }}>{_name}</span>}
-              />
-            </>
-          );
-        },
-        input: text,
-      }) as JSX.Element[];
-    }
-    setCommentText(result);
-  }, []);
+	const appCtx = React.useContext(AppContext);
+	if (!appCtx)
+		throw new Error("No wrapping AppContext.Provider called");
 
-  return (
-    <>
-      <Stack wrap horizontal horizontalAlign="start" verticalAlign="center">
-        {isArray(commentText) ? (
-          (commentText as any[]).map((el, i) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-            if (isObject(el)) {
-              return <span style={{ paddingRight: 5 }}>{el}</span>;
-            } else {
-              const _el: string = el.trim();
-              if (_el.length) {
-                return (
-                  <Text style={{ paddingRight: 5 }} variant="small" key={i}>
-                    {he.decode(_el)}
-                  </Text>
-                );
-              }
-            }
-          })
-        ) : (
-          <Text variant="small">{he.decode(commentText)}</Text>
-        )}
-      </Stack>
-    </>
-  );
+	const theme = useTheme();
+
+	const { serviceScope } = appCtx;
+
+	const commentText = React.useMemo(
+		(): string | Array<JSX.Element> =>
+		{
+			if (!mentions.length)
+				return text;
+
+			return regexifyString({
+				pattern: /@mention&#123;\d+&#125;/g,
+				decorator: (match, index) =>
+				{
+					const { name, email } = mentions[index];
+					return (
+						<LivePersona
+							/* source and targe ServiceScope should come frome within the same library */
+							// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+							serviceScope={serviceScope as any}
+							upn={email}
+							template={<span style={{ color: theme.themePrimary, whiteSpace: "nowrap" }}>@{name}</span>}
+						/>
+					);
+				},
+				input: text
+			}) as Array<JSX.Element>;
+		},
+		[mentions, serviceScope, text, theme]
+	);
+
+	return (
+		<Stack wrap horizontal horizontalAlign="start" verticalAlign="center">
+			{Array.isArray(commentText)
+				? commentText.map((el, i) => (<span key={i} style={{ paddingRight: 5 }}>{el}</span>))
+				: (<Text variant="small">{he.decode(commentText)}</Text>)}
+		</Stack>
+	);
 };

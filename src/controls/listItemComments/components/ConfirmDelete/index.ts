@@ -1,1 +1,1 @@
-export * from './ConfirmDelete';
+export * from "./ConfirmDelete";

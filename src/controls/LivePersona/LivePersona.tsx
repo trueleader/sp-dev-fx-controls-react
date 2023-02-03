@@ -1,45 +1,47 @@
-import * as React from "react";
-import { createElement, useEffect, useRef , useState} from "react";
+import type { ILivePersonatProps } from "./ILivePersonaProps";
 import { Log } from "@microsoft/sp-core-library";
 import { SPComponentLoader } from "@microsoft/sp-loader";
-import { ILivePersonatProps} from '.';
+import React, { createElement, useEffect, useRef, useState } from "react";
 
-const LIVE_PERSONA_COMPONENT_ID: string = "914330ee-2df2-4f6e-a858-30c23a812408";
+const LIVE_PERSONA_COMPONENT_ID = "914330ee-2df2-4f6e-a858-30c23a812408";
 
 
-export const LivePersona: React.FunctionComponent<ILivePersonatProps> = (
-  props: React.PropsWithChildren<ILivePersonatProps>
-) => {
-  const [isComponentLoaded, setIsComponentLoaded] = useState<boolean>(false);
-  const sharedLibrary = useRef<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { upn, template, disableHover, serviceScope } = props;
+export const LivePersona: React.FunctionComponent<ILivePersonatProps> = (props: ILivePersonatProps) =>
+{
+	const [isComponentLoaded, setIsComponentLoaded] = useState<boolean>(false);
+	const sharedLibrary = useRef<any>(); // eslint-disable-line @typescript-eslint/no-explicit-any
+	const { upn, template, disableHover, serviceScope } = props;
 
-  useEffect(() => {
-    (async () => {
-      if (!isComponentLoaded) {
-        try {
-          sharedLibrary.current = await SPComponentLoader.loadComponentById(LIVE_PERSONA_COMPONENT_ID);
-          setIsComponentLoaded(true);
-        } catch (error) {
-          Log.error(`[LivePersona]`, error, serviceScope );
-        }
-      }
-    })().then(() => { /* no-op; */ }).catch(() => { /* no-op; */ });
-  }, []);
+	useEffect(
+		() =>
+		{
+			if (isComponentLoaded) return;
 
-let renderPersona: JSX.Element = null;
-if (isComponentLoaded) {
-    renderPersona = createElement(sharedLibrary.current.LivePersonaCard, {
-        className: 'livePersonaCard',
-        clientScenario: 'livePersonaCard',
-        disableHover:  disableHover,
-        hostAppPersonaInfo: {
-            PersonaType: 'User'
-        },
-        upn: upn,
-        legacyUpn: upn,
-        serviceScope: serviceScope,
-    }, createElement("div",{},template));
-}
-return renderPersona;
+			SPComponentLoader.loadComponentById(LIVE_PERSONA_COMPONENT_ID)
+				.then((component) => { sharedLibrary.current = component; setIsComponentLoaded(true); })
+				.catch((e: Error) => Log.error(`[LivePersona]`, e, serviceScope));
+		},
+		[isComponentLoaded, serviceScope]
+	);
+
+
+	if (!isComponentLoaded || !sharedLibrary.current)
+		return null;
+
+	return createElement(
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+		sharedLibrary.current.LivePersonaCard,
+		{
+			className: "livePersonaCard",
+			clientScenario: "livePersonaCard",
+			disableHover: disableHover,
+			hostAppPersonaInfo: {
+				PersonaType: "User"
+			},
+			upn: upn,
+			legacyUpn: upn,
+			serviceScope: serviceScope
+		},
+		createElement("div", {}, template)
+	);
 };
